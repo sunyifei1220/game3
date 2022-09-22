@@ -11,8 +11,9 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
-
 GLuint hexapod_meshes_for_lit_color_texture_program = 0;
+GLuint poop_meshes_for_lit_color_texture_program = 0;
+Scene::Transform* default_transform;
 Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
 	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
@@ -35,40 +36,48 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 
 	});
 });
+Load< MeshBuffer > poop_meshes(LoadTagDefault, []() -> MeshBuffer const* {
+	MeshBuffer const* ret = new MeshBuffer(data_path("poop.pnct"));
+	poop_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	return ret;
+	});
+Load< Scene > poop_scene(LoadTagDefault, []() -> Scene const* {
+	return new Scene(data_path("poop.scene"), [&](Scene& scene, Scene::Transform* transform, std::string const& mesh_name) {
+		default_transform = transform;
 
-Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("dusty-floor.opus"));
+	});
+});
+Load< Sound::Sample > poop_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("poop.wav"));
 });
 
-PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
-	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
+void add_poop(Scene & scene, Scene::Transform * transform) {
+	transform->scale  *= 0.1;
+	Mesh const& mesh = poop_meshes->lookup("poop");
+	scene.drawables.emplace_back(transform);
+	Scene::Drawable& drawable = scene.drawables.back();
+	
+	drawable.pipeline = lit_color_texture_program_pipeline;
 
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
+	drawable.pipeline.vao = poop_meshes_for_lit_color_texture_program;
+	drawable.pipeline.type = mesh.type;
+	drawable.pipeline.start = mesh.start;
+	drawable.pipeline.count = mesh.count;
+}
+PlayMode::PlayMode() : scene(*poop_scene) {
 
 	//get pointer to camera for convenience:
-	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
+	if (scene.cameras.size() != 1) throw std::runtime_error("it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
+	Sound::loop_3D(*poop_sample, 2.0f, glm::vec3(0.0f, 0.0f, 0.0f), 10.0f);
 
-	//start music loop playing:
-	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
 }
 
 PlayMode::~PlayMode() {
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-
+	static bool create_poop = false;
 	if (evt.type == SDL_KEYDOWN) {
 		if (evt.key.keysym.sym == SDLK_ESCAPE) {
 			SDL_SetRelativeMouseMode(SDL_FALSE);
@@ -89,9 +98,27 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			down.downs += 1;
 			down.pressed = true;
 			return true;
+		}else if (evt.key.keysym.sym == SDLK_SPACE) {
+			if (!changed) {
+				total_score -= 30;
+				return false;
+			}
+			else if (!create_poop) {
+				Scene::Transform* transform = new Scene::Transform();
+				transform->scale = default_transform->scale;
+				transform->position = camera->transform->position;
+				transform->position.y += 7.0f;
+				transform->position.x -= 7.0f;
+				transform->position.z -= 5.0f;
+				add_poop(scene,transform);
+				create_poop = true;
+			}
+			space.downs += 1;
+			space.pressed = true;
+			space.released = false;
 		}
 	} else if (evt.type == SDL_KEYUP) {
-		if (evt.key.keysym.sym == SDLK_a) {
+		if (evt.key.keysym.sym == SDLK_a) { 
 			left.pressed = false;
 			return true;
 		} else if (evt.key.keysym.sym == SDLK_d) {
@@ -104,51 +131,23 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			down.pressed = false;
 			return true;
 		}
-	} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
-		if (SDL_GetRelativeMouseMode() == SDL_FALSE) {
-			SDL_SetRelativeMouseMode(SDL_TRUE);
-			return true;
-		}
-	} else if (evt.type == SDL_MOUSEMOTION) {
-		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
+		else if (evt.key.keysym.sym == SDLK_SPACE) {
+			create_poop = false; 
+			space.pressed = false;
+			space.released = true;
 			return true;
 		}
 	}
-
 	return false;
 }
 
 void PlayMode::update(float elapsed) {
-
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-
-	//move sound to follow leg tip position:
-	leg_tip_loop->set_position(get_leg_tip_position(), 1.0f / 60.0f);
-
+	static long start = static_cast<long>(time(NULL));
+	long curr = static_cast<long>(time(NULL));
+	if (curr - start <= 1) {
+		space.downs = 0;
+		return;
+	}
 	//move camera:
 	{
 
@@ -159,7 +158,20 @@ void PlayMode::update(float elapsed) {
 		if (!left.pressed && right.pressed) move.x = 1.0f;
 		if (down.pressed && !up.pressed) move.y =-1.0f;
 		if (!down.pressed && up.pressed) move.y = 1.0f;
-
+		if(space.pressed) {
+			Scene::Transform * transform = new Scene::Transform();
+			float scale = (space.downs) * 0.1f;
+			transform->scale = glm::vec3(scale, scale, 0.5 * scale);
+			if (!scene.drawables.empty()) {
+				auto drawable = scene.drawables.back();
+				drawable.transform->scale += glm::vec3(scale, scale, 0.5 * scale);
+				
+				if (changed) total_score += 10;
+			}
+			space.downs = 0;
+		}
+		
+		set_duration(); 
 		//make it so that moving diagonally doesn't go faster:
 		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
 
@@ -217,12 +229,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		));
 
 		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		lines.draw_text("Hold Space when volumes up, release when volumes down. WASD to Move. Totol score: " + std::to_string(total_score),
 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
 		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		lines.draw_text("Hold Space when volumes up, release when volumes down. WASD to Move. Totol score: " + std::to_string(total_score),
 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
@@ -230,7 +242,32 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GL_ERRORS();
 }
 
-glm::vec3 PlayMode::get_leg_tip_position() {
-	//the vertex position here was read from the model in blender:
-	return lower_leg->make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
+void PlayMode::set_duration() {
+	long curr = static_cast<long>(time(NULL));
+	static long start = 0, end = curr;
+	
+	if (!changed) {
+		if (curr - end < 3) return; // leave at least 3s as a buffer
+		int to_change = rand() % 3; 
+		if (!to_change) { // 1/3 chance to change
+			duration = (uint16_t)rand() % 5 + 1;
+			start = curr;
+			change_volume();
+			changed = true;
+		}
+	}
+	else {
+		if (curr - start >= duration) {
+			Sound::set_volume(1.0f);
+			duration = 0;
+			end = curr;
+			changed = false;
+		}
+	}
+}
+
+void PlayMode::change_volume() {
+	int index = rand() % 4;
+	float volume = volumes[index];
+	Sound::set_volume(volume);
 }

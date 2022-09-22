@@ -8,6 +8,7 @@
 #include <vector>
 #include <deque>
 
+#include <ctime>
 struct PlayMode : Mode {
 	PlayMode();
 	virtual ~PlayMode();
@@ -23,26 +24,20 @@ struct PlayMode : Mode {
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up;
+		uint8_t released = 0;
+	} left, right, down, up, space;
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
 
-	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
 
-	glm::vec3 get_leg_tip_position();
-
-	//music coming from the tip of the leg (as a demonstration):
-	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
-	
 	//camera:
 	Scene::Camera *camera = nullptr;
-
+	float volumes[4] = { 2.0f, 4.0f, 6.0f, 8.0f };
+	int total_score = 0;
+	int curr_score = 0;
+	uint16_t duration = 0;
+	bool changed = false;
+	void set_duration();
+	void change_volume();
 };

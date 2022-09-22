@@ -1,8 +1,8 @@
-# (TODO: your game's title)
+# Music poop
 
-Author: (TODO: your name)
+Author: Yifei Sun
 
-Design: (TODO: In two sentences or fewer, describe what is new and interesting about your game.)
+Design: New game mode, which depends on the backgound music
 
 Screen Shot:
 
@@ -10,6 +10,6 @@ Screen Shot:
 
 How To Play:
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+Hold the space key when the volume of bgm is obviously up to earn score, and release it when it's down. The goal is to get mroe score. 
 
 This game was built with [NEST](NEST.md).
